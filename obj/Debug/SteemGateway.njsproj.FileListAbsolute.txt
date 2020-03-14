@@ -1,0 +1,2 @@
+C:\Repos\SteemGateway\obj\Debug\SteemGateway.njsprojAssemblyReference.cache
+C:\Repos\SteemGateway\bin\Microsoft.NodejsTools.WebRole.dll
