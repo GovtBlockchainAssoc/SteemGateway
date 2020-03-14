@@ -56,26 +56,29 @@ const { setupLoader } = require('@openzeppelin/contract-loader');
 const web3 = new Web3('ws://localhost:8545');
 const loader = setupLoader({ provider: web3 }).web3;
 // Set up a web3 contract using the contract loader 
-const coldStore = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1';
 const contract = '0xCfEB869F69431e42cdB54A4F4f105C19C080A601';
 const token = loader.fromArtifact('testToken', contract);
+// Set up instance specific variables
+const coldStore = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1';
+const tokenDecimals = 100;
 ethWatcher();
 // Steem Setup
 const steem = require("steem");
 const steemName = 'gba-richmond';
+const tokenSymbol = 'PLAY';
 const postingWif = '5KhqqHYWNBaNBB9b1Qj82p5eGaoTiMuGZiu297qGsUFtiE1C6xb';
 const activeWif = '5JtgE62L5LjZA4fn4H3F1cnzJyysYqWA1EN5nhMkSQWJyUFqQJU';
-const tokenDecimals = 100;
 // APIs periodically go down, sometimes for days, so we have three to choose from
 //steem.api.setOptions({ url: 'wss://steemd-int.steemit.com' });
 steem.api.setOptions({ url: 'https://api.steemit.com' });
 //steem.api.setOptions({ url: 'https://anyx.io' });
+steemWatcher();
 // ******************************************************************************************
 // Watching PoA Ethereum blockchain & taking actions on Steem
 function eHandler(error, event) {
     const retVals = event.returnValues;
     console.log("ETHEREUM " + retVals.from + " transferred " +
-        (retVals.value / tokenDecimals) + " of our tokens to " +
+        (retVals.value / tokenDecimals) + " of " + tokenSymbol + " tokens to " +
         retVals.to + " - " + retVals.memo);
     if (retVals.to == coldStore) {
         let amount = (retVals.value / tokenDecimals).toString();
@@ -83,7 +86,7 @@ function eHandler(error, event) {
             contractName: "tokens",
             contractAction: "transfer",
             contractPayload: {
-                symbol: "PLAY",
+                symbol: tokenSymbol,
                 to: retVals.memo,
                 quantity: amount,
                 memo: "Transfer from ethereum"
@@ -109,7 +112,7 @@ function ethWatcher() {
 // ******************************************************************************************
 // Watching Steem blockchain & taking actions on PoA Ethereum
 function sHandler(res, x) {
-    if (x.contractPayload.symbol == "PLAY") {
+    if (x.contractPayload.symbol == tokenSymbol) {
         const vars = x.contractPayload;
         console.log("STEEM " + res.required_auths + " transferred " +
             vars.quantity + " " + vars.symbol +
@@ -127,36 +130,39 @@ function sHandler(res, x) {
         }
     }
 }
-try {
-    steem.api.streamOperations(function (err, res) {
-        if (err)
-            console.log("Caught streamOps err:" + err);
-        else
-            try {
-                if (res[0] == "custom_json" &&
-                    res[1].id == "ssc-mainnet1") {
-                    var acts = JSON.parse(res[1].json);
-                    if (acts.contractName == "tokens" &&
-                        acts.contractAction == "transfer") {
-                        if (Array.isArray(acts)) {
-                            acts.forEach(act => {
-                                sHandler(res[1], act);
-                            });
+function steemWatcher() {
+    try {
+        steem.api.streamOperations(function (err, res) {
+            if (err)
+                console.log("Caught streamOps err:" + err);
+            else
+                try {
+                    if (res[0] == "custom_json" &&
+                        res[1].id == "ssc-mainnet1") {
+                        var acts = JSON.parse(res[1].json);
+                        if (acts.contractName == "tokens" &&
+                            acts.contractAction == "transfer") {
+                            if (Array.isArray(acts)) {
+                                acts.forEach(act => {
+                                    sHandler(res[1], act);
+                                });
+                            }
+                            else
+                                sHandler(res[1], acts);
                         }
-                        else
-                            sHandler(res[1], acts);
                     }
                 }
-            }
-            catch (ex) {
-                console.log("Our error: " + ex);
-                // likely the format of the result is 
-                // corrupted and/or not what we expected
-            }
-    });
-}
-catch (ex) {
-    console.log("Uncaught streamOps error: " + ex);
+                catch (ex) {
+                    console.log("Our error: " + ex);
+                    // likely the format of the result is 
+                    // corrupted and/or not what we expected
+                }
+        });
+    }
+    catch (ex) {
+        console.log("Uncaught streamOps error: " + ex);
+        steemWatcher();
+    }
 }
 // ******************************************************************************************
 app.set('port', process.env.PORT || 3000);
